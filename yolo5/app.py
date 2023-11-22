@@ -53,7 +53,7 @@ def predict():
     # The predicted image typically includes bounding boxes drawn around the detected objects, along with class labels and possibly confidence scores.
 
     predicted_img_path = Path(f'static/data/{prediction_id}/{original_img_path}')
-    predicted_img_path_str = str(predicted_img_path)
+    #predicted_img_path_str = str(predicted_img_path)
     predicted_img = "predicted_" + img_name
     # TODO Uploads the predicted image (predicted_img_path) to S3 (be careful not to override the original image).
     try:
@@ -80,25 +80,31 @@ def predict():
         prediction_summary = {
             'prediction_id': prediction_id,
             'original_img_path': original_img_path,
-            'predicted_img_path': predicted_img_path_str,
+            'predicted_img_path': str(predicted_img_path),
             'labels': labels,
             'time': time.time()
         }
 
         # TODO store the prediction_summary in MongoDB
-        a_replica_set_name = "myReplicaSet"
-        hosts = ["localhost:27017", "localhost:27018", "localhost:27019", ]
-        client = pymongo.MongoClient(f"mongodb://{','.join(hosts)}/?replicaSet={a_replica_set_name}")
+        replica_set_name = "myReplicaSet"
+        hosts = ["mongo1:27017", "mongo2:27018", "mongo3:27019"]
+        try:
+            logger.info(f"Connecting to MongoDB ")
+            client = pymongo.MongoClient(f"mongodb://{','.join(hosts)}/?replicaSet={replica_set_name}")
+            logger.info("Successfully connected to MongoDB")
+        except Exception as e:
+            logger.error(f"Failed to connect to MongoDB. Error: {str(e)}")
+            raise
         db = client["object_detection_db"]
         collection = db["predicted_objects"]
 
         try:
             collection.insert_one(prediction_summary)
-        except Exception:
-            logger.info(f'failed to insert prediction for {img_name} ')
-
-        # amin:try without closing mongodb db
-        client.close()
+            prediction_summary['_id'] = str(prediction_summary['_id'])
+            logger.info(f'Successfully inserted prediction')
+        except Exception as e:
+            logger.error(f'Failed to insert prediction for {img_name} to MongoDB. Error: {str(e)}')
+            return f'Failed to insert prediction for {img_name} to MongoDB', 500
         return prediction_summary
     else:
         return f'prediction: {prediction_id}/{original_img_path}. prediction result not found', 404
