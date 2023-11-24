@@ -1,9 +1,10 @@
+import requests
 import telebot
 from loguru import logger
 import os
 import time
 from telebot.types import InputFile
-
+import boto3
 
 class Bot:
 
@@ -18,7 +19,6 @@ class Bot:
 
         # set the webhook URL
         self.telegram_bot_client.set_webhook(url=f'{telegram_chat_url}/{token}/', timeout=60)
-
         logger.info(f'Telegram Bot information\n\n{self.telegram_bot_client.get_me()}')
 
     def send_text(self, chat_id, text):
@@ -76,10 +76,25 @@ class QuoteBot(Bot):
 class ObjectDetectionBot(Bot):
     def handle_message(self, msg):
         logger.info(f'Incoming message: {msg}')
+        images_bucket = os.environ['BUCKET_NAME']
 
         if self.is_current_msg_photo(msg):
-            pass
-            # TODO download the user photo (utilize download_user_photo)
-            # TODO upload the photo to S3
-            # TODO send a request to the `yolo5` service for prediction
-            # TODO send results to the Telegram end-user
+            photo_path = self.download_user_photo(msg)
+            photo_name = photo_path.split('/')[1]
+            s3 = boto3.client('s3')
+            s3.upload_file(photo_path, images_bucket, photo_name)
+            url = 'http://yolo5:8081/predict'
+            params = {'imgName': {photo_name}}
+            response = requests.post(url, params=params)
+            predictions = response.json()['labels']
+            detected_objects = {}
+            for predict in predictions:
+                object_name = predict['class']
+                if object_name in detected_objects:
+                    detected_objects[object_name] += 1
+                else:
+                    detected_objects[object_name] = 1
+            text = 'Detected objects:\n' + '\n'.join(f'{key}: {value}' for key, value in detected_objects.items())
+            self.send_text(msg['chat']['id'], {text})
+        else:
+            self.send_text(msg['chat']['id'], 'Send me a photo to start the object prediction :)')
