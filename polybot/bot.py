@@ -77,24 +77,34 @@ class ObjectDetectionBot(Bot):
     def handle_message(self, msg):
         logger.info(f'Incoming message: {msg}')
         images_bucket = os.environ['BUCKET_NAME']
-
-        if self.is_current_msg_photo(msg):
-            photo_path = self.download_user_photo(msg)
-            photo_name = photo_path.split('/')[1]
-            s3 = boto3.client('s3')
-            s3.upload_file(photo_path, images_bucket, photo_name)
-            url = 'http://yolo5:8081/predict'
-            params = {'imgName': {photo_name}}
-            response = requests.post(url, params=params)
-            predictions = response.json()['labels']
-            detected_objects = {}
-            for predict in predictions:
-                object_name = predict['class']
-                if object_name in detected_objects:
-                    detected_objects[object_name] += 1
-                else:
-                    detected_objects[object_name] = 1
-            text = 'Detected objects:\n' + '\n'.join(f'{key}: {value}' for key, value in detected_objects.items())
-            self.send_text(msg['chat']['id'], {text})
-        else:
-            self.send_text(msg['chat']['id'], 'Send me a photo to start the object prediction :)')
+        try:
+            if self.is_current_msg_photo(msg):
+                photo_path = self.download_user_photo(msg)
+                photo_name = photo_path.split('/')[1]
+                # Upload the file to S3
+                s3 = boto3.client('s3')
+                s3.upload_file(photo_path, images_bucket, photo_name)
+                # Make a request to the object detection service
+                response = requests.post(f"http://yolo5:8081/predict?imgName={photo_name}")
+                predictions = response.json()['labels']
+                detected_objects = {}
+                for predict in predictions:
+                    object_name = predict['class']
+                    if object_name in detected_objects:
+                        detected_objects[object_name] += 1
+                    else:
+                        detected_objects[object_name] = 1
+                text = 'Detected objects:\n' + '\n'.join(f'{key}: {value}' for key, value in detected_objects.items())
+                self.send_text(msg['chat']['id'], {text})
+            elif msg["text"] == '/start':
+                welcome_msg = ('Welcome to the "Image Prediction World". \nIn order to start the prediction please '
+                               'send me a photo.')
+                self.send_text(msg['chat']['id'], welcome_msg)
+            else:
+                msg_to_use = ("Sorry, I can only predict objects in photos.\nSend me a photo and I will show you the "
+                              "real magic.")
+                self.send_text_with_quote(msg['chat']['id'], msg_to_use, quoted_msg_id=msg["message_id"])
+        except Exception as e:
+            logger.error(f'Error processing message: {e}')
+            error_message = "An error occurred while processing your request. Please try again later."
+            self.send_text(msg['chat']['id'], error_message)
