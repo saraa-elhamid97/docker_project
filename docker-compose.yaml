@@ -1,0 +1,56 @@
+version: "3.9"
+services:
+  mongo1:
+    image: mongo:5
+    ports:
+      - 27017:27017
+    command: mongod --replSet myReplicaSet --bind_ip localhost,mongo1
+    depends_on:
+      - mongo2
+      - mongo3
+
+  mongo2:
+    image: mongo:5
+    ports:
+      - 27018:27017
+    command: mongod --replSet myReplicaSet --bind_ip localhost,mongo2
+
+  mongo3:
+    image: mongo:5
+    ports:
+      - 27019:27017
+    command: mongod --replSet myReplicaSet --bind_ip localhost,mongo3
+
+
+
+  yolo5:
+    image: saraa97/yolo5:1.0.0
+    ports:
+      - 8081:8081
+    environment:
+      - BUCKET_NAME=saraa-docker-project-bucket
+    depends_on:
+      - mongo1
+      - mongo2
+      - mongo3
+    volumes:
+      - ~/.aws:/root/.aws
+
+  polybot:
+    image: saraa97/polybot:1.1.0
+    ports:
+      - 8443:8443
+    environment:
+      - BUCKET_NAME=saraa-docker-project-bucket
+      - TELEGRAM_APP_URL=https://generally-fluent-sawfish.ngrok-free.app/
+      - TELEGRAM_TOKEN_FILE=/run/secrets/telegram_token
+    depends_on:
+      - yolo5
+    volumes:
+      - ~/.aws:/root/.aws
+    secrets:
+      - telegram_token
+
+secrets:
+  telegram_token:
+    file: telegram_token.txt
