@@ -37,20 +37,15 @@ services:
       - ~/.aws:/root/.aws
 
   polybot:
-    image: saraa97/polybot:1.1.0
+    image: saraa97/polybot:1.2.0
     ports:
       - 8443:8443
     environment:
       - BUCKET_NAME=saraa-docker-project-bucket
       - TELEGRAM_APP_URL=https://generally-fluent-sawfish.ngrok-free.app/
-      - TELEGRAM_TOKEN_FILE=/run/secrets/telegram_token
+    env_file:
+      - .env
     depends_on:
       - yolo5
     volumes:
       - ~/.aws:/root/.aws
-    secrets:
-      - telegram_token
-
-secrets:
-  telegram_token:
-    file: telegram_token.txt
